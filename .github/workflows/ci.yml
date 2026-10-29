@@ -1,0 +1,110 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Conn3x
+        env: &gh
+          GH_TOKEN: ${{ github.token }}
+        run: &install |
+          tag=$(gh release view -R conn3xorg/conn3x --json tagName -q .tagName)
+          file="conn3x_${tag#v}_linux_amd64.tar.gz"
+          cd "$RUNNER_TEMP"
+          curl -sSfLO "https://github.com/conn3xorg/conn3x/releases/download/$tag/$file"
+          curl -sSfLO "https://github.com/conn3xorg/conn3x/releases/download/$tag/checksums.txt"
+          grep " $file\$" checksums.txt | sha256sum -c -
+          mkdir -p bin && tar -xzf "$file" -C bin conn3x
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - run: conn3x version
+      - run: conn3x fmt -check -recursive
+      - name: Validate
+        run: conn3x init -backend=false && conn3x validate
+      - name: Validate the example
+        working-directory: examples/local
+        run: conn3x init -backend=false && conn3x validate
+
+  e2e:
+    needs: validate
+    runs-on: ubuntu-24.04
+    # GitLab's package is over a gigabyte and its first reconfigure takes
+    # several minutes.
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        distro: [ubuntu2404, debian13, rocky10]
+    name: e2e (${{ matrix.distro }})
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The test host images live in the Conn3x repo.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: conn3xorg/conn3x
+          ref: main
+          path: conn3x
+          persist-credentials: false
+          sparse-checkout: test/images
+      - name: Install Conn3x
+        env: *gh
+        run: *install
+      - name: Start the ${{ matrix.distro }} host
+        working-directory: examples/local
+        env:
+          CONTAINERFILE: ${{ github.workspace }}/conn3x/test/images/${{ matrix.distro }}/Containerfile
+          # The host container is privileged, so GitLab can set the kernel
+          # parameters its PostgreSQL wants.
+          PODMAN: sudo podman
+        run: ./up.sh
+      - name: Apply, then plan again with no changes
+        working-directory: examples/local
+        env:
+          TF_VAR_root_password: ci-only-Plum-Kettle-93
+        run: |
+          conn3x init
+          conn3x apply -auto-approve
+          conn3x plan -detailed-exitcode
+          if grep -q ci-only terraform.tfstate; then exit 1; fi
+      # GitLab reports itself ready, and root signs in with the password
+      # from the plan while a wrong one gets the form back. GitLab 19 has
+      # dropped the OAuth password grant, so the check goes through the web
+      # sign-in form and uses the session it gets on the API.
+      - name: Check readiness and sign in as root
+        run: |
+          cat > check.sh <<'EOF'
+          set -eu
+          curl=/opt/gitlab/embedded/bin/curl
+          u=http://127.0.0.1:8929
+          $curl -sSf $u/-/readiness | grep -q '"status":"ok"'
+          login() {
+            jar=$(mktemp)
+            csrf=$($curl -sSf -c "$jar" $u/users/sign_in | sed -n 's/.*name="authenticity_token" value="\([^"]*\)".*/\1/p' | head -1)
+            $curl -s -o /dev/null -b "$jar" -c "$jar" --data-urlencode "authenticity_token=$csrf" --data-urlencode user[login]=root --data-urlencode "user[password]=$1" $u/users/sign_in
+            $curl -s -b "$jar" $u/api/v4/user
+          }
+          if login wrong-password | grep -q '"username":"root"'; then exit 1; fi
+          login ci-only-Plum-Kettle-93 | grep -q '"username":"root"'
+          [ "$(stat -c '%U %a' /etc/gitlab/conn3x-root-password)" = "root 600" ]
+          grep -q "^puma\['worker_processes'\] = 2" /etc/gitlab/gitlab.rb
+          EOF
+          sudo podman exec -i circuit-gitlab sh < check.sh
+      - name: Clean up
+        if: always()
+        working-directory: examples/local
+        env:
+          PODMAN: sudo podman
+        run: ./down.sh

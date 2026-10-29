@@ -1,0 +1,14 @@
+# A throwaway Ubuntu 24.04 host with systemd and sshd, for trying this
+# circuit. It matches the image Conn3x's own end-to-end tests use.
+FROM docker.io/library/ubuntu:24.04
+
+RUN apt-get update \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends systemd systemd-sysv dbus openssh-server sudo ca-certificates \
+ && rm -rf /var/lib/apt/lists/* \
+ && systemctl enable ssh \
+ && systemctl mask systemd-firstboot.service \
+ && mkdir -p -m 700 /root/.ssh
+
+STOPSIGNAL SIGRTMIN+3
+EXPOSE 22
+CMD ["/sbin/init"]
