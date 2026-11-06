@@ -117,13 +117,9 @@ jobs:
           conn3x init
           conn3x apply -auto-approve -var gitlab_version=19.5.1
           test "$(sudo podman exec circuit-gitlab cat /opt/gitlab/embedded/service/gitlab-rails/VERSION)" = 19.5.1
+          # The package's upgrade restarts GitLab, and the apply waits for it
+          # to be ready again, so the plan straight after it is clean.
           conn3x apply -auto-approve
-          # The package's upgrade restarts GitLab, and the apply doesn't wait
-          # for it to be ready again, so this waits as the README says to.
-          for _ in $(seq 150); do
-            sudo podman exec circuit-gitlab /opt/gitlab/embedded/bin/curl -sf -o /dev/null http://127.0.0.1:8929/-/readiness && break
-            sleep 2
-          done
           conn3x plan -detailed-exitcode
           test "$(sudo podman exec circuit-gitlab cat /opt/gitlab/embedded/service/gitlab-rails/VERSION)" = 19.5.3
       - name: Check readiness and sign in as root after the upgrade

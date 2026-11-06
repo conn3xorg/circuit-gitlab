@@ -157,14 +157,17 @@ circuit "gitlab" {
     }
   }
 
-  # Puma takes a minute or two to come up after a reconfigure. unless is
-  # checked at plan time, before the reconfigure, so its revision makes the
-  # apply check again.
+  # Puma takes a minute or two to come up after a reconfigure, and after
+  # the restart a new package version's upgrade does. unless is checked at
+  # plan time, before either, so their revisions make the apply check again.
   step "ready" {
     command {
-      command  = "for _ in $(seq 300); do /opt/gitlab/embedded/bin/curl -sfk -o /dev/null ${local.readiness_url} && exit 0; sleep 2; done; echo 'GitLab did not answer on ${local.readiness_url} in 10 minutes. See gitlab-ctl status and gitlab-ctl tail.' >&2; exit 1"
-      unless   = "/opt/gitlab/embedded/bin/curl -sfk -o /dev/null ${local.readiness_url}"
-      triggers = { reconfigure = conn3x_command.gitlab__reconfigure[each.key].revision }
+      command = "for _ in $(seq 300); do /opt/gitlab/embedded/bin/curl -sfk -o /dev/null ${local.readiness_url} && exit 0; sleep 2; done; echo 'GitLab did not answer on ${local.readiness_url} in 10 minutes. See gitlab-ctl status and gitlab-ctl tail.' >&2; exit 1"
+      unless  = "/opt/gitlab/embedded/bin/curl -sfk -o /dev/null ${local.readiness_url}"
+      triggers = {
+        package     = conn3x_package.gitlab__package[each.key].revision
+        reconfigure = conn3x_command.gitlab__reconfigure[each.key].revision
+      }
     }
   }
 }

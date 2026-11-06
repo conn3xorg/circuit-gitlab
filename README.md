@@ -101,7 +101,7 @@ On each host, in order:
 3. Writes `root_password` to `/etc/gitlab/conn3x-root-password`, and installs `tzdata` and `hostname`, which GitLab needs and minimal images leave out.
 4. Installs `gitlab-ce` at `gitlab_version`, then writes `/etc/gitlab/gitlab.rb`, mode `0600`: `external_url`, `letsencrypt['enable']`, the NGINX and trusted proxy settings when `reverse_proxy` is set, and `extra_config` at the end. The package goes first on purpose: a fresh install that already finds an `external_url` in `gitlab.rb` reconfigures on the spot, without the root password, and GitLab would make one up. A new version upgrades GitLab in place: the package runs `gitlab-ctl upgrade`, which migrates the database and restarts it.
 5. Runs `gitlab-ctl reconfigure` on the first apply and whenever `gitlab.rb` changed, and not otherwise.
-6. Waits, up to 10 minutes, for `/-/readiness` to answer on the host itself.
+6. Waits, up to 10 minutes, for `/-/readiness` to answer on the host itself, after a reconfigure or a new package version.
 
 After a reboot GitLab takes a minute or two to come back. A plan in that window shows the wait step again, and an apply just waits for GitLab; once it's up, the plan is clean.
 
