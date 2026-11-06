@@ -18,7 +18,7 @@ variable "gitlab_root_password" {
 }
 
 module "gitlab" {
-  source = "github.com/conn3xorg/circuit-gitlab?ref=v0.1.1"
+  source = "github.com/conn3xorg/circuit-gitlab?ref=v0.1.2"
 
   hosts                = { git1 = "203.0.113.10" }
   ssh_private_key_file = "~/.ssh/id_ed25519"
