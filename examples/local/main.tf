@@ -10,6 +10,13 @@ variable "root_password" {
   sensitive = true
 }
 
+# CI sets this to install an older GitLab first, then upgrades to the
+# circuit's own pin by applying again without it.
+variable "gitlab_version" {
+  type    = string
+  default = null
+}
+
 module "gitlab" {
   source = "../.."
 
@@ -19,8 +26,9 @@ module "gitlab" {
   ssh_known_hosts_file = "./known_hosts"
 
   # Reach it through an SSH tunnel; see README.md.
-  external_url  = "http://localhost:8929"
-  root_password = var.root_password
+  external_url   = "http://localhost:8929"
+  root_password  = var.root_password
+  gitlab_version = var.gitlab_version
 
   # Fewer workers and no bundled monitoring, so GitLab fits next to other
   # containers on a laptop.

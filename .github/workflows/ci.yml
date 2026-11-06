@@ -102,6 +102,32 @@ jobs:
           grep -q "^puma\['worker_processes'\] = 2" /etc/gitlab/gitlab.rb
           EOF
           sudo podman exec -i circuit-gitlab sh < check.sh
+      # A fresh host gets an earlier patch release, then the circuit's own
+      # pin is applied over it, the way someone raises gitlab_version. The
+      # package's upgrade migrates the database, and root still signs in.
+      - name: Upgrade from GitLab 19.5.1 on a fresh host, then plan again with no changes
+        working-directory: examples/local
+        env:
+          CONTAINERFILE: ${{ github.workspace }}/conn3x/test/images/${{ matrix.distro }}/Containerfile
+          PODMAN: sudo podman
+          TF_VAR_root_password: ci-only-Plum-Kettle-93
+        run: |
+          ./down.sh
+          ./up.sh
+          conn3x init
+          conn3x apply -auto-approve -var gitlab_version=19.5.1
+          test "$(sudo podman exec circuit-gitlab cat /opt/gitlab/embedded/service/gitlab-rails/VERSION)" = 19.5.1
+          conn3x apply -auto-approve
+          # The package's upgrade restarts GitLab, and the apply doesn't wait
+          # for it to be ready again, so this waits as the README says to.
+          for _ in $(seq 150); do
+            sudo podman exec circuit-gitlab /opt/gitlab/embedded/bin/curl -sf -o /dev/null http://127.0.0.1:8929/-/readiness && break
+            sleep 2
+          done
+          conn3x plan -detailed-exitcode
+          test "$(sudo podman exec circuit-gitlab cat /opt/gitlab/embedded/service/gitlab-rails/VERSION)" = 19.5.3
+      - name: Check readiness and sign in as root after the upgrade
+        run: sudo podman exec -i circuit-gitlab sh < check.sh
       - name: Clean up
         if: always()
         working-directory: examples/local
