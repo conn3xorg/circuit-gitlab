@@ -157,7 +157,7 @@ When the keys in `files/` near their expiry in February 2028, GitLab will publis
 
 ## Tested on
 
-Ubuntu 24.04, Debian 13 and Rocky Linux 10, with GitLab CE 19.5.3. CI applies [examples/local](examples/local) to each in a container on amd64 and checks that the second plan has no changes and that the password isn't in the state. Then it checks that `/-/readiness` says `ok`, that `root` can sign in through the web form with the password from the plan and use that session on `/api/v4/user`, and that a wrong password can't. GitLab 19 no longer offers the OAuth password grant (`/oauth/token` answers `unsupported_grant_type`), so the sign-in form is the check.
+Ubuntu 24.04, Debian 13 and Rocky Linux 10, with GitLab CE 19.5.3. CI applies [examples/local](examples/local) to each in a container on amd64 and checks that the second plan has no changes and that the password isn't in the state. Then it checks that `/-/readiness` says `ok`, that `root` can sign in through the web form with the password from the plan and use that session on `/api/v4/user`, and that a wrong password can't. On a fresh container it also installs GitLab 19.5.1, then applies the circuit's own pin over it, and checks the second plan is empty, 19.5.3 is running and the sign-in checks still pass. GitLab 19 no longer offers the OAuth password grant (`/oauth/token` answers `unsupported_grant_type`), so the sign-in form is the check.
 
 Before tagging, the same checks passed by hand in arm64 containers of all three on Apple silicon. On Ubuntu 24.04 a change to `extra_config` ran reconfigure once and reached GitLab, and reverting it did the same, each followed by a clean plan; restarting the container gave a clean plan too.
 
