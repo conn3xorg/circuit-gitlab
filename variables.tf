@@ -51,6 +51,7 @@ variable "external_url" {
 variable "gitlab_version" {
   type        = string
   default     = "19.5.3"
+  nullable    = false
   description = "GitLab CE release to install, such as \"19.5.3\". Raising it upgrades GitLab in place. Follow GitLab's upgrade path: stop at each required release on the way."
 
   validation {
