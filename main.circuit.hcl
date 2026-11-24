@@ -50,6 +50,7 @@ locals {
   # apt wants the full version, dnf takes the leading part of it.
   package_version = { debian = "${var.gitlab_version}-ce.0", redhat = var.gitlab_version }
 
+  config_dir    = "/etc/gitlab"
   config_file   = "/etc/gitlab/gitlab.rb"
   password_file = "/etc/gitlab/conn3x-root-password"
 
@@ -67,6 +68,11 @@ locals {
     "# Written by Conn3x. Changes here are overwritten on the next apply.",
     "external_url '${var.external_url}'",
     "letsencrypt['enable'] = ${var.letsencrypt}",
+    # The circuit keeps /etc/gitlab at 0755. GitLab's own default makes it
+    # 0775 root:root on every reconfigure, and on Rocky Linux and RHEL
+    # sync, shutdown, halt and operator have gid 0 too, so Conn3x refuses
+    # to read or write in it.
+    "manage_storage_directories['manage_etc'] = false",
     # TLS ends at the proxy, which talks plain HTTP to bundled NGINX. GitLab
     # still builds https links from external_url.
     var.reverse_proxy == null ? "" : <<-EOT
@@ -102,6 +108,17 @@ circuit "gitlab" {
       url    = local.family[each.key] == "debian" ? "https://packages.gitlab.com/gitlab/gitlab-ce/${local.os[each.key]}/${local.codename[each.key]}" : "https://packages.gitlab.com/gitlab/gitlab-ce/el/$releasever/$basearch"
       key    = file("${path.module}/files/${local.family[each.key] == "debian" ? "gitlab-repo.asc" : "gitlab-packages.asc"}")
       suites = local.family[each.key] == "debian" ? [local.codename[each.key]] : null
+    }
+  }
+
+  # Before anything lands in it. GitLab leaves the directory alone with
+  # manage_etc off, as gitlab.rb sets below.
+  step "config_dir" {
+    directory {
+      path  = local.config_dir
+      owner = "root"
+      group = "root"
+      mode  = "0755"
     }
   }
 
